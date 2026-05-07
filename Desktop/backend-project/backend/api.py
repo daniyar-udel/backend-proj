@@ -1,41 +1,57 @@
-from fastapi import FastAPI, status, HTTPException, Body
+from fastapi import FastAPI, status, HTTPException
+from pydantic import BaseModel
 
 app = FastAPI()
 
-car_db = {0: 'Lexus ct 200h'}
+class CreatPhone(BaseModel):
+    model: str
+    price: int
 
-@app.get('/cars')
-async def read_cars() -> dict:
-    return car_db
+class Phones(BaseModel):
+    id: int
+    model: str
+    price: int
 
-@app.get('/cars/{cars_id}')
-async def read_cars_id(cars_id: int) -> str:
-    try:
-        return car_db[cars_id]
-    except:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, description='Car not found')
+phones_db: list[Phones] = [Phones(id=1, model='Galaxy A8', price=500)]
+
+@app.get('/phones', response_model=list[Phones])
+async def read_phones() -> list[Phones]:
+    return phones_db
+
+@app.get('/phones/{phone_id}', response_model=Phones)
+async def read_phone(phone_id:int) -> Phones:
+    for phone in phones_db:
+        if phone.id == phone_id:
+            return phone
+    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='There is no phone')
+
+@app.post('/phones', response_model=Phones, status_code=status.HTTP_201_CREATED)
+async def create_phone(new_phone: CreatPhone) -> Phones:
+    curr_id = phones_db[-1].id + 1 if phones_db else 0
+    phone = Phones(id=curr_id, model=new_phone.model, price=new_phone.price)
+    phones_db.append(phone)
+    return phone
+
+@app.put('/phones/{phone_id}', response_model=Phones, status_code=status.HTTP_200_OK)
+async def change_phone(phone_id:int, new_phone: CreatPhone) -> Phones:
+    for i, phone in enumerate(phones_db):
+        if phone.id == phone_id:
+            phone = Phones(id=phone_id, model=new_phone.model, price=new_phone.price)
+            phones_db[i] = phone
+            return phone
+    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='There is no phone')
+        
+@app.delete('/phones/{phone_id}', response_model=Phones, status_code=status.HTTP_200_OK)
+async def delete_phone(phone_id: int) -> Phones:
+    for i, phone in enumerate(phones_db):
+        if phone.id == phone_id:
+            phones_db.pop(i)
+            return phone
+    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='There is no phone')
+
+@app.delete('/phones', response_model=list[Phones])
+async def delete_phones() -> list[Phones]:
+    phones_db.clear()
+    return phones_db
+
     
-@app.post('/cars', status_code=status.HTTP_201_CREATED)
-async def create_car(car: str = Body()) -> str:
-    curr_ind = max(car_db) + 1 if car_db else 0
-    car_db[curr_ind] = car
-    return 'Car created'
-
-@app.put('/cars/{car_id}', status_code=status.HTTP_200_OK)
-async def update_car(car_id: int, car: str = Body()) -> str:
-    if car_id not in car_db:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Car not found')
-    car_db[car_id] = car
-    return 'Car updated'
-
-@app.delete('/cars/{car_id}', status_code=status.HTTP_200_OK)
-async def delete_car(car_id: int) -> str:
-    if car_id not in car_db:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Car not found')
-    car_db.pop(car_id)
-    return f'Car with {car_id} id deleted'
-
-@app.delete('/cars')
-async def delete_cars() -> str:
-    car_db.clear()
-    return 'Car data cleared'
