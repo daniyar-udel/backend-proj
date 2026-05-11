@@ -1,53 +1,76 @@
-from fastapi import FastAPI, HTTPException, status
-from pydantic import BaseModel, Field
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
+from fastapi.middleware.cors import CORSMiddleware
 
-app = FastAPI()
+app = FastAPI(title='Message CRUD')
 
-class CreateBottle(BaseModel):
-    name: str = Field(max_length=15)
-    price: int = Field(ge=1)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=['*'],
+    allow_credentials=True,
+    allow_methods=['*'],
+    allow_headers=['*'],
+)
 
-class Bottle(CreateBottle):
+class MessageCreate(BaseModel):
+    content: str
+
+class MessageUpdate(BaseModel):
+    content: str|None = None
+
+class Message(BaseModel):
     id: int
+    content: str
 
-bottles_db: list[Bottle] = [Bottle(id=1, name='Deer Park', price=1)]
+messages_db: list[Message] = [Message(id=0, content='First FastAPI message')]
 
-@app.get('/bottles', response_model=list[Bottle])
-async def read_bottles() -> list[Bottle]:
-    return bottles_db
+def get_index(message_id) -> int:
+    for i, val in enumerate(messages_db):
+        if val.id == message_id:
+            return i
+    return -1
 
-@app.get('/bottles/{bottle_id}', response_model=Bottle)
-async def read_bottle(bottle_id: int) -> Bottle:
-    for bottle in bottles_db:
-        if bottle.id == bottle_id:
-            return bottle
-    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Bottle not found')
+def create_id() -> int:
+    return messages_db[-1].id + 1 if messages_db else 0
 
-@app.post('/bottles', response_model=Bottle)
-async def create_bottle(new_bottle: CreateBottle) -> Bottle:
-    next_id = len(bottles_db) + 1 if bottles_db else 0
-    bottle = Bottle(id=next_id, name=new_bottle.name, price=new_bottle.price)
-    bottles_db.append(bottle)
-    return bottle
+@app.get('/messages', response_model=list[Message])
+async def read_messages() -> list[Message]:
+    return messages_db
 
-@app.put('/bottles/{bottle_id}', response_model=Bottle)
-async def update_bottle(bottle_id:int, new_bottle: CreateBottle) -> Bottle:
-    for i, bottle in enumerate(bottles_db):
-        if bottle.id == bottle_id:
-            update_bottle = Bottle(id=bottle_id, name=new_bottle.name, price=new_bottle.price)
-            bottles_db[i] = update_bottle
-            return update_bottle
-    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Bottle not found')
+@app.get('/messages/{message_id}', response_model=Message)
+async def reas_message(message_id: int) -> Message:
+    idx = get_index(message_id)
+    if idx == -1:
+        raise HTTPException(status_code=404)
+    return messages_db[idx]
 
-@app.delete('/bottles/{bottle_id}', response_model=Bottle)
-async def delete_bottle(bottle_id:int) -> Bottle:
-    for i, bottle in enumerate(bottles_db):
-        if bottle.id == bottle_id:
-            bottles_db.pop(i)
-            return bottle
-    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Bottle not found')
+@app.post('/messages', response_model=Message)
+async def create_message(new_message: MessageCreate) -> Message:
+    message = Message(id=create_id(), content=new_message.content)
+    messages_db.append(message)
+    return message
 
-@app.delete('/bottles', response_model=list[Bottle])
-async def delete_bottles() -> list[Bottle]:
-    bottles_db.clear()
-    return bottles_db
+@app.put('/messages/{message_id}', response_model=Message)
+async def put_message(message_id: int, put_message: MessageCreate) -> Message:
+    idx = get_index(message_id)
+    if idx == -1:
+        raise HTTPException(status_code=404)
+    message = Message(id=message_id, content=put_message.content)
+    messages_db[idx] = message
+    return message
+
+@app.patch('/messages/{message_id}', response_model=Message)
+async def update_message(message_id: int, payload: MessageUpdate) -> Message:
+    idx = get_index(message_id)
+    if idx == -1:
+        raise HTTPException(status_code=404)
+    if payload.content is not None:
+        messages_db[idx].content = payload.content
+    return messages_db[idx]
+
+@app.delete('/messages/{message_id}')
+async def delete_message(message_id: int):
+    idx = get_index(message_id)
+    if idx == -1:
+        raise HTTPException(status_code=404)
+    messages_db.pop(idx)
